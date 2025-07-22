@@ -1,10 +1,11 @@
 #include<array>
 #include<optional>
-template<typename T>
+#include<atomic>
+template<typename T , int SIZE>
 class SPSC{
-    std::array<T , 8> arr;
-    int head;
-    int tail;
+    std::array<std::aligned_storage_t<sizeof(T),alignof(T)>,SIZE> arr;
+    alignas(64) std::atomic<int> head;
+    alignas(64) std::atomic<int> tail;
     public:
         SPSC();
         std::optional<T> push(T element);
@@ -18,33 +19,38 @@ class SPSC{
             return index & get_mask();
         }
 };
-template<typename T>
-SPSC<T>::SPSC()
+template<typename T, int SIZE>
+SPSC<T , SIZE>::SPSC()
 {
     head = 0;
     tail = 0;
 }
-template<typename T>
-inline std::optional<T> SPSC<T> :: push(T element)
+template<typename T , int SIZE>
+inline std::optional<T> SPSC<T,SIZE>:: push(T element)
 {
-    if(wrap_around(head+1)) == tail)
+    int current_head = head.load(std::memory_order_relaxed);
+    int next_head = wrap_around(current_head+1);
+    int current_tail = tail.load(std::memory_order_acquire);
+    if(next_head == current_tail)
     {
         return std::nullopt;
     }
-    arr[head] = element;
-    head++;
-    head = wrap_around(head);
+    new (static_cast<void*>(&arr[current_head])) T(element);
+    head.store(next_head , std::memory_order_release);
     return element;
 }
-template<typename T>
-inline std::optional<T> SPSC<T>::pop()
+template<typename T, int SIZE>
+inline std::optional<T> SPSC<T, SIZE>::pop()
 {
-    if(head == tail)
-    {
-        return std::nullopt;
+    int current_tail = tail.load(std::memory_order_relaxed);
+    int current_head = head.load(std::memory_order_acquire);
+    if (current_head == current_tail) {
+        return std::nullopt; 
     }
-    T popped_element = arr[tail];
-    tail++;
-    tail = wrap_around(tail);
-    return popped_element;  
+    T* obj_ptr = reinterpret_cast<T*>(&arr[current_tail]);
+    T popped_element = *obj_ptr;
+    obj_ptr->~T(); 
+    int next_tail = wrap_around(current_tail + 1);
+    tail.store(next_tail, std::memory_order_release);
+    return popped_element;
 }
