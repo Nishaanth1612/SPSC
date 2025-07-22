@@ -1,11 +1,10 @@
 #include <iostream>
-#include "SPSC.h" // Replace with actual file if needed
+#include "SPSC.h" 
 
 int main() {
     constexpr int size = 8;
     SPSC<int, size> queue;
 
-    // Push some elements
     for (int i = 0; i < size - 1; ++i) {
         auto result = queue.push(i);
         if (result) {
@@ -16,8 +15,6 @@ int main() {
     }
 
     std::cout << "---- Now popping ----" << std::endl;
-
-    // Pop all elements
     for (int i = 0; i < size - 1; ++i) {
         auto result = queue.pop();
         if (result) {
